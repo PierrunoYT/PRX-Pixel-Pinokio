@@ -1,11 +1,10 @@
 const path = require('path')
+const metadata = require('./pinokio.json')
+
 module.exports = {
-  version: "5.0",
-  title: "PRX Pixel",
-  description: "Pixel-space PRX text-to-image pipeline (~7B params, Qwen3-VL text encoder, no VAE)",
-  icon: "icon.png",
+  ...metadata,
   menu: async (kernel, info) => {
-    let installed = info.exists("env")
+    let installed = info.exists("app/env")
     let running = {
       install: info.running("install.js"),
       start: info.running("start.js"),
