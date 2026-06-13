@@ -47,7 +47,7 @@ module.exports = {
     {
       method: "fs.write",
       params: {
-        path: "app/.env",
+        path: "ENVIRONMENT",
         content: "HF_TOKEN={{local.hf_token}}"
       }
     }
