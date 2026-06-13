@@ -3,7 +3,7 @@
   "title": "PRX Pixel",
   "description": "Pixel-space PRX text-to-image pipeline (~7B params, Qwen3-VL text encoder, no VAE)",
   "icon": "icon.png",
-  "platform": ["win32", "linux", "darwin"],
+  "platform": ["win32", "linux"],
   "gpu": ["nvidia"],
   "keywords": ["text-to-image", "diffusion", "prx", "pixel", "photoroom"]
 }

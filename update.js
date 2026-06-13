@@ -3,6 +3,12 @@ module.exports = {
     {
       method: "shell.run",
       params: {
+        message: "git pull"
+      }
+    },
+    {
+      method: "shell.run",
+      params: {
         venv: "env",
         path: "app",
         message: [

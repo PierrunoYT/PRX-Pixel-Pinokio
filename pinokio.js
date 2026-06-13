@@ -1,8 +1,5 @@
 module.exports = {
   version: "5.0",
-  title: "PRX Pixel",
-  description: "Pixel-space PRX text-to-image pipeline (~7B params, Qwen3-VL text encoder, no VAE)",
-  icon: "icon.png",
   menu: async (kernel, info) => {
     let installed = info.exists("app/env")
     let running = {

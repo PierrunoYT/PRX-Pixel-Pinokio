@@ -35,20 +35,19 @@ module.exports = {
       params: {
         title: "Hugging Face Token",
         description: "The PRXPixel model may require a Hugging Face token for access. Enter your HF_TOKEN (or leave blank if not needed):",
-        type: "password"
-      }
-    },
-    {
-      method: "local.set",
-      params: {
-        hf_token: "{{input}}"
+        form: [{
+          type: "password",
+          key: "hf_token",
+          title: "HF_TOKEN",
+          placeholder: "hf_..."
+        }]
       }
     },
     {
       method: "fs.write",
       params: {
         path: "ENVIRONMENT",
-        content: "HF_TOKEN={{local.hf_token}}"
+        content: "HF_TOKEN={{input.hf_token}}"
       }
     }
   ]
