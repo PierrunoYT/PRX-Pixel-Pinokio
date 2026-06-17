@@ -26,7 +26,7 @@ module.exports = {
         venv: "env",
         path: "app",
         message: [
-          "uv pip install git+https://github.com/huggingface/diffusers.git@prx-pixel-pipeline"
+          "uv pip install git+https://github.com/huggingface/diffusers.git@main"
         ]
       }
     },
