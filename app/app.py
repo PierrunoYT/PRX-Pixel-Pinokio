@@ -135,13 +135,11 @@ with gr.Blocks(title="PRX Pixel") as demo:
             out_seed = gr.Number(label="Seed used", interactive=False)
 
     gr.Markdown("### Examples — click to load prompt")
-    examples_gallery = gr.Gallery(
-        value=[(None, cap) for cap, _ in EXAMPLES],
+    example_caption = gr.Textbox(visible=False)
+    examples_gallery = gr.Dataset(
+        components=[example_caption],
+        samples=[[cap] for cap, _ in EXAMPLES],
         label="Examples",
-        columns=4,
-        height="auto",
-        object_fit="cover",
-        allow_preview=False,
         show_label=False,
     )
 
