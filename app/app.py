@@ -31,10 +31,12 @@ load_kwargs = {"torch_dtype": torch.bfloat16}
 if HF_TOKEN:
     load_kwargs["token"] = HF_TOKEN
 
-pipe = PRXPixelPipeline.from_pretrained(MODEL_ID, **load_kwargs)
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+
+pipe = PRXPixelPipeline.from_pretrained(MODEL_ID, **load_kwargs).to(DEVICE)
 print(f"Loading safety classifier {SAFETY_MODEL}...")
 safety_tokenizer = AutoTokenizer.from_pretrained(SAFETY_MODEL)
-safety_model = AutoModelForSequenceClassification.from_pretrained(SAFETY_MODEL)
+safety_model = AutoModelForSequenceClassification.from_pretrained(SAFETY_MODEL).to(DEVICE)
 _NSFW_ID = next(i for i, lbl in safety_model.config.id2label.items() if lbl.lower() == "nsfw")
 print("Pipeline + safety guard ready.")
 
@@ -56,18 +58,15 @@ def generate(prompt, negative_prompt, steps, guidance_scale, shift, resolution, 
     seed = int(seed)
 
     # Safety check first, before the (expensive) generation.
-    safety_model.to("cuda" if torch.cuda.is_available() else "cpu")
     if _is_blocked(prompt):
         raise gr.Error("This prompt was blocked by the safety filter (no NSFW or violent content, please).")
 
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    pipe.to(device)
-    
-    # `shift` is a scheduler setting; rebuild the scheduler so the slider takes effect.
-    pipe.scheduler = FlowMatchEulerDiscreteScheduler(shift=float(shift))
+    # `shift` is a scheduler setting; rebuild it from the pretrained config so the slider
+    # takes effect without losing the model's other scheduler settings.
+    pipe.scheduler = FlowMatchEulerDiscreteScheduler.from_config(pipe.scheduler.config, shift=float(shift))
 
     res = int(resolution)
-    generator = torch.Generator(device).manual_seed(seed) if torch.cuda.is_available() else torch.Generator().manual_seed(seed)
+    generator = torch.Generator(DEVICE).manual_seed(seed) if torch.cuda.is_available() else torch.Generator().manual_seed(seed)
     
     image = pipe(
         prompt,
