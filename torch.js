@@ -17,7 +17,7 @@ module.exports = {
       params: {
         venv: "{{args.venv}}",
         path: "{{args.path}}",
-        message: "uv pip install torch==2.7.0 torchvision==0.22.0 --index-url https://download.pytorch.org/whl/cu128"
+        message: "uv pip install torch==2.7.0 torchvision==0.22.0 --reinstall-package torch --reinstall-package torchvision --index-url https://download.pytorch.org/whl/cu128"
       },
       next: null
     },
@@ -27,7 +27,7 @@ module.exports = {
       params: {
         venv: "{{args.venv}}",
         path: "{{args.path}}",
-        message: "uv pip install torch==2.7.0 torchvision==0.22.0 --index-url https://download.pytorch.org/whl/rocm6.3"
+        message: "uv pip install torch==2.7.0 torchvision==0.22.0 --reinstall-package torch --reinstall-package torchvision --index-url https://download.pytorch.org/whl/rocm6.3"
       },
       next: null
     },
@@ -37,7 +37,7 @@ module.exports = {
       params: {
         venv: "{{args.venv}}",
         path: "{{args.path}}",
-        message: "uv pip install torch==2.7.0 torchvision==0.22.0"
+        message: "uv pip install torch==2.7.0 torchvision==0.22.0 --reinstall-package torch --reinstall-package torchvision"
       },
       next: null
     },
@@ -46,7 +46,7 @@ module.exports = {
       params: {
         venv: "{{args.venv}}",
         path: "{{args.path}}",
-        message: "uv pip install torch==2.7.0 torchvision==0.22.0 --index-url https://download.pytorch.org/whl/cpu"
+        message: "uv pip install torch==2.7.0 torchvision==0.22.0 --reinstall-package torch --reinstall-package torchvision --index-url https://download.pytorch.org/whl/cpu"
       }
     }
   ]
