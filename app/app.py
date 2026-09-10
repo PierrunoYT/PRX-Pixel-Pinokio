@@ -6,6 +6,8 @@ this, so output_type="pil" returns a ready image directly.
 """
 
 import os
+import math
+import threading
 import gradio as gr
 import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
@@ -26,53 +28,114 @@ VIOLENCE_WORDS = [
     "slit throat", "stab wound", "gunshot wound", "self-harm", "suicide",
 ]
 
-print(f"Loading {MODEL_ID}...")
-load_kwargs = {"torch_dtype": torch.bfloat16}
-if HF_TOKEN:
-    load_kwargs["token"] = HF_TOKEN
+def _device_and_dtype():
+    if torch.cuda.is_available():
+        dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float32
+        return "cuda", dtype
+    if torch.backends.mps.is_available():
+        return "mps", torch.float32
+    return "cpu", torch.float32
 
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-pipe = PRXPixelPipeline.from_pretrained(MODEL_ID, **load_kwargs).to(DEVICE)
-print(f"Loading safety classifier {SAFETY_MODEL}...")
-safety_tokenizer = AutoTokenizer.from_pretrained(SAFETY_MODEL)
-safety_model = AutoModelForSequenceClassification.from_pretrained(SAFETY_MODEL).to(DEVICE)
-_NSFW_ID = next(i for i, lbl in safety_model.config.id2label.items() if lbl.lower() == "nsfw")
-print("Pipeline + safety guard ready.")
+DEVICE, DTYPE = _device_and_dtype()
+pipe = None
+safety_tokenizer = None
+safety_model = None
+_NSFW_ID = None
+_scheduler_config = None
+_generation_lock = threading.Lock()
+
+
+def _load_pipeline():
+    global pipe, _scheduler_config
+    if pipe is None:
+        print(f"Loading {MODEL_ID} on {DEVICE}...")
+        kwargs = {"torch_dtype": DTYPE}
+        if HF_TOKEN:
+            kwargs["token"] = HF_TOKEN
+        loaded = PRXPixelPipeline.from_pretrained(MODEL_ID, **kwargs).to(DEVICE)
+        _scheduler_config = dict(loaded.scheduler.config)
+        pipe = loaded
 
 
 def _is_blocked(text: str) -> bool:
     """Return True if the prompt is sexual NSFW (classifier) or hits the violence blocklist."""
+    global safety_model, safety_tokenizer, _NSFW_ID
     low = (text or "").lower()
     if any(w in low for w in VIOLENCE_WORDS):
         return True
+    if safety_model is None:
+        print(f"Loading safety classifier {SAFETY_MODEL}...")
+        tokenizer = AutoTokenizer.from_pretrained(SAFETY_MODEL)
+        model = AutoModelForSequenceClassification.from_pretrained(SAFETY_MODEL).to("cpu").eval()
+        nsfw_id = next((int(i) for i, label in model.config.id2label.items()
+                        if label.lower() == "nsfw"), None)
+        if nsfw_id is None:
+            raise RuntimeError("Safety classifier has no NSFW label.")
+        safety_tokenizer, safety_model, _NSFW_ID = tokenizer, model, nsfw_id
     inputs = safety_tokenizer(text or "", return_tensors="pt", truncation=True, max_length=512).to(safety_model.device)
     nsfw_prob = safety_model(**inputs).logits.softmax(-1)[0, _NSFW_ID].item()
     return nsfw_prob >= NSFW_THRESHOLD
 
 
-@torch.inference_mode()
 def generate(prompt, negative_prompt, steps, guidance_scale, shift, resolution, seed, randomize_seed):
-    if randomize_seed or seed is None or int(seed) < 0:
-        seed = int(torch.randint(0, MAX_SEED, (1,)).item())
-    seed = int(seed)
+    if not isinstance(prompt, str) or not prompt.strip():
+        raise gr.Error("Enter a non-empty prompt.")
+    if negative_prompt is not None and not isinstance(negative_prompt, str):
+        raise gr.Error("Negative prompt must be text.")
+    steps = _number(steps, "Steps", 1, 50, integer=True)
+    guidance_scale = _number(guidance_scale, "Guidance", 1, 10)
+    shift = _number(shift, "Scheduler shift", 1, 8)
+    resolution = _number(resolution, "Resolution", 512, 1024, integer=True)
+    if resolution not in (512, 768, 1024):
+        raise gr.Error("Resolution must be 512, 768, or 1024.")
+    if not isinstance(randomize_seed, bool):
+        raise gr.Error("Randomize seed must be true or false.")
+    if randomize_seed or seed is None:
+        seed = int(torch.randint(0, MAX_SEED + 1, (1,)).item())
+    else:
+        seed = _number(seed, "Seed", -1, MAX_SEED, integer=True)
+        if seed == -1:
+            seed = int(torch.randint(0, MAX_SEED + 1, (1,)).item())
+
+    # The pipeline and scheduler mutate during inference, including API requests.
+    with _generation_lock:
+        return _generate(prompt, negative_prompt, steps, guidance_scale, shift, resolution, seed)
+
+
+def _number(value, name, minimum, maximum, integer=False):
+    try:
+        number = float(value)
+    except (TypeError, ValueError, OverflowError):
+        raise gr.Error(f"{name} must be a number.") from None
+    if isinstance(value, bool) or not math.isfinite(number) or not minimum <= number <= maximum:
+        raise gr.Error(f"{name} must be between {minimum} and {maximum}.")
+    if integer and not number.is_integer():
+        raise gr.Error(f"{name} must be a whole number.")
+    return int(number) if integer else number
+
+
+@torch.inference_mode()
+def _generate(prompt, negative_prompt, steps, guidance_scale, shift, resolution, seed):
 
     # Safety check first, before the (expensive) generation.
     if _is_blocked(prompt):
         raise gr.Error("This prompt was blocked by the safety filter (no NSFW or violent content, please).")
+    _load_pipeline()
 
     # `shift` is a scheduler setting; rebuild it from the pretrained config so the slider
     # takes effect without losing the model's other scheduler settings.
-    pipe.scheduler = FlowMatchEulerDiscreteScheduler.from_config(pipe.scheduler.config, shift=float(shift))
+    pipe.scheduler = FlowMatchEulerDiscreteScheduler.from_config(_scheduler_config, shift=shift)
 
     res = int(resolution)
-    generator = torch.Generator(DEVICE).manual_seed(seed) if torch.cuda.is_available() else torch.Generator().manual_seed(seed)
+    generator = torch.Generator("cuda" if DEVICE == "cuda" else "cpu").manual_seed(seed)
     
     image = pipe(
         prompt,
         negative_prompt=negative_prompt or "",
         height=res,
         width=res,
+        use_resolution_binning=False,
         num_inference_steps=int(steps),
         guidance_scale=float(guidance_scale),
         generator=generator,
@@ -109,47 +172,52 @@ def _load_example(evt: gr.SelectData):
     return EXAMPLES[evt.index][1]
 
 
-with gr.Blocks(title="PRX Pixel") as demo:
-    gr.Markdown("# PRX Pixel — pixel-space PRX text-to-image\nLocal launcher for `Photoroom/prxpixel-t2i`.")
-    with gr.Row():
-        with gr.Column():
-            prompt = gr.Textbox(label="Prompt", value="A front-facing portrait of a lion in the golden savanna at sunset.")
-            negative_prompt = gr.Textbox(label="Negative prompt", value="")
-            with gr.Row():
-                steps = gr.Slider(1, 50, value=28, step=1, label="Steps")
-                guidance_scale = gr.Slider(1.0, 10.0, value=1.0, step=0.5, label="Guidance (CFG)")
-            gr.Markdown(
-                "ℹ️ **CFG = 1** gives good, realistic results most of the time. Raising CFG can help correct "
-                "structural issues on some prompts, but leads to much less diversity and less realistic textures."
-            )
-            with gr.Row():
-                shift = gr.Slider(1.0, 8.0, value=3.0, step=0.5, label="Scheduler shift")
-                resolution = gr.Dropdown([512, 768, 1024], value=1024, label="Resolution")
-            with gr.Row():
-                seed = gr.Number(value=0, label="Seed", precision=0)
-                randomize_seed = gr.Checkbox(value=True, label="Randomize seed")
-            run = gr.Button("Generate", variant="primary")
-        with gr.Column():
-            out_image = gr.Image(label="Output", type="pil")
-            out_seed = gr.Number(label="Seed used", interactive=False)
+def build_demo():
+    with gr.Blocks(title="PRX Pixel") as demo:
+        gr.Markdown("# PRX Pixel — pixel-space PRX text-to-image\nLocal launcher for `Photoroom/prxpixel-t2i`.")
+        with gr.Row():
+            with gr.Column():
+                prompt = gr.Textbox(label="Prompt", value="A front-facing portrait of a lion in the golden savanna at sunset.")
+                negative_prompt = gr.Textbox(label="Negative prompt", value="")
+                with gr.Row():
+                    steps = gr.Slider(1, 50, value=28, step=1, label="Steps")
+                    guidance_scale = gr.Slider(1.0, 10.0, value=1.0, step=0.5, label="Guidance (CFG)")
+                gr.Markdown(
+                    "ℹ️ **CFG = 1** gives good, realistic results most of the time. Raising CFG can help correct "
+                    "structural issues on some prompts, but leads to much less diversity and less realistic textures."
+                )
+                with gr.Row():
+                    shift = gr.Slider(1.0, 8.0, value=3.0, step=0.5, label="Scheduler shift")
+                    resolution = gr.Dropdown([512, 768, 1024], value=1024, label="Resolution")
+                with gr.Row():
+                    seed = gr.Number(value=0, label="Seed", precision=0)
+                    randomize_seed = gr.Checkbox(value=True, label="Randomize seed")
+                run = gr.Button("Generate", variant="primary")
+            with gr.Column():
+                out_image = gr.Image(label="Output", type="pil")
+                out_seed = gr.Number(label="Seed used", interactive=False)
 
-    gr.Markdown("### Examples — click to load prompt")
-    example_caption = gr.Textbox(visible=False)
-    examples_gallery = gr.Dataset(
-        components=[example_caption],
-        samples=[[cap] for cap, _ in EXAMPLES],
-        label="Examples",
-        show_label=False,
-    )
+        gr.Markdown("### Examples — click to load prompt")
+        example_caption = gr.Textbox(visible=False)
+        examples_gallery = gr.Dataset(
+            components=[example_caption],
+            samples=[[cap] for cap, _ in EXAMPLES],
+            label="Examples",
+            show_label=False,
+        )
 
-    examples_gallery.select(_load_example, None, prompt)
+        examples_gallery.select(_load_example, None, prompt)
 
-    run.click(
-        generate,
-        inputs=[prompt, negative_prompt, steps, guidance_scale, shift, resolution, seed, randomize_seed],
-        outputs=[out_image, out_seed],
-    )
+        run.click(
+            generate,
+            inputs=[prompt, negative_prompt, steps, guidance_scale, shift, resolution, seed, randomize_seed],
+            outputs=[out_image, out_seed],
+            api_name="generate",
+            concurrency_limit=1,
+        )
+
+    return demo
 
 
 if __name__ == "__main__":
-    demo.launch(server_name="127.0.0.1")
+    build_demo().queue().launch(server_name="127.0.0.1")
