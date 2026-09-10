@@ -2,3 +2,8 @@ ENVIRONMENT
 app/env/
 app/.env
 logs/
+.opencode/
+__pycache__/
+*.py[cod]
+.venv/
+.uv-cache/
