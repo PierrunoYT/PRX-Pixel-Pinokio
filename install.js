@@ -1,9 +1,14 @@
 module.exports = {
   run: [
     {
+      method: "fs.rm",
+      params: { path: "app/env/.installed" }
+    },
+    {
       method: "shell.run",
       params: {
         venv: "env",
+        venv_python: "3.11",
         path: "app",
         message: [
           "uv pip install -r requirements.txt"
@@ -26,7 +31,9 @@ module.exports = {
         venv: "env",
         path: "app",
         message: [
-          "uv pip install git+https://github.com/huggingface/diffusers.git@main"
+          "uv pip install git+https://github.com/huggingface/diffusers.git@main",
+          "uv pip check",
+          "python -c \"from diffusers import PRXPixelPipeline; from transformers import Qwen3VLTextModel; import gradio\""
         ]
       }
     },
@@ -44,10 +51,18 @@ module.exports = {
       }
     },
     {
-      method: "fs.write",
+      when: "{{input && input.hf_token && input.hf_token.trim()}}",
+      method: "fs.append",
       params: {
         path: "ENVIRONMENT",
-        content: "HF_TOKEN={{input.hf_token}}"
+        text: "\nHF_TOKEN={{input.hf_token.trim().replace(/[\\r\\n]/g, '')}}\n"
+      }
+    },
+    {
+      method: "fs.write",
+      params: {
+        path: "app/env/.installed",
+        text: "ok\n"
       }
     }
   ]
