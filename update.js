@@ -39,7 +39,7 @@ module.exports = {
         venv: "env",
         path: "app",
         message: [
-          "uv pip install git+https://github.com/huggingface/diffusers.git@main --upgrade",
+          "uv pip install git+https://github.com/huggingface/diffusers.git@main --upgrade-package diffusers",
           "uv pip check",
           "python -c \"from diffusers import PRXPixelPipeline; from transformers import Qwen3VLTextModel; import gradio\""
         ]

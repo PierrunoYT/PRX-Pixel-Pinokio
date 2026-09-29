@@ -69,3 +69,10 @@ test('server URL capture excludes terminal escape codes', () => {
   const regex = new RegExp(step.params.on[0].event.slice(1, -1))
   assert.equal(regex.exec('Running on local URL: http://127.0.0.1:7860\x1b[0m')[1], 'http://127.0.0.1:7860')
 })
+
+test('update refreshes diffusers without upgrading unrelated dependencies', () => {
+  const commands = require('../update').run.flatMap(step => [].concat(step.params.message || []))
+  const diffusers = commands.find(command => command.includes('diffusers.git'))
+  assert.ok(diffusers.includes('--upgrade-package diffusers'))
+  assert.ok(!/--upgrade(?!-package)|\s-U\b/.test(diffusers))
+})
