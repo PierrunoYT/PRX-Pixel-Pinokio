@@ -10,11 +10,11 @@ module.exports = {
         venv: "env",
         venv_python: "3.11",
         path: "app",
-        message: [
-          "uv pip install -r requirements.txt"
-        ]
+        message: "python --version"
       }
     },
+    // Install the backend-specific torch first; requirements (e.g. accelerate)
+    // depend on torch and would otherwise pull the generic PyPI build.
     {
       method: "script.start",
       params: {
@@ -23,6 +23,16 @@ module.exports = {
           venv: "env",
           path: "app"
         }
+      }
+    },
+    {
+      method: "shell.run",
+      params: {
+        venv: "env",
+        path: "app",
+        message: [
+          "uv pip install -r requirements.txt"
+        ]
       }
     },
     {

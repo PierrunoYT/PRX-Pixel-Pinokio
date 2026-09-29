@@ -76,3 +76,11 @@ test('update refreshes diffusers without upgrading unrelated dependencies', () =
   assert.ok(diffusers.includes('--upgrade-package diffusers'))
   assert.ok(!/--upgrade(?!-package)|\s-U\b/.test(diffusers))
 })
+
+test('install creates the Python 3.11 venv and torch before other requirements', () => {
+  const steps = require('../install').run
+  const venv = steps.findIndex(step => step.params.venv_python === '3.11')
+  const torch = steps.findIndex(step => step.params.uri === 'torch.js')
+  const requirements = steps.findIndex(step => [].concat(step.params.message || []).some(m => m.includes('requirements.txt')))
+  assert.ok(venv >= 0 && venv < torch && torch < requirements)
+})
