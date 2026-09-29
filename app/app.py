@@ -7,6 +7,7 @@ this, so output_type="pil" returns a ready image directly.
 
 import os
 import math
+import re
 import threading
 import gradio as gr
 import torch
@@ -27,6 +28,9 @@ VIOLENCE_WORDS = [
     "bloodbath", "massacre", "torture", "lynching", "execution", "corpse", "bloody corpse",
     "slit throat", "stab wound", "gunshot wound", "self-harm", "suicide",
 ]
+# Match at word starts so stems still catch inflections ("mutilated") without
+# blocking words that merely contain a term ("category" contains "gory").
+_VIOLENCE_RE = re.compile(r"\b(?:" + "|".join(map(re.escape, VIOLENCE_WORDS)) + ")")
 
 def _device_and_dtype():
     if torch.cuda.is_available():
@@ -61,8 +65,7 @@ def _load_pipeline():
 def _is_blocked(text: str) -> bool:
     """Return True if the prompt is sexual NSFW (classifier) or hits the violence blocklist."""
     global safety_model, safety_tokenizer, _NSFW_ID
-    low = (text or "").lower()
-    if any(w in low for w in VIOLENCE_WORDS):
+    if _VIOLENCE_RE.search((text or "").lower()):
         return True
     if safety_model is None:
         print(f"Loading safety classifier {SAFETY_MODEL}...")

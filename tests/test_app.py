@@ -93,6 +93,16 @@ class AppTests(unittest.TestCase):
             self.app.generate(*self.args)
         self.app.PRXPixelPipeline.from_pretrained.assert_not_called()
 
+    def test_violence_blocklist_matches_word_starts_only(self):
+        self.app.safety_model = MagicMock()
+        self.app.safety_model.return_value.logits.softmax.return_value.__getitem__.return_value.item.return_value = 0.0
+        self.app.safety_tokenizer = MagicMock()
+        self.app._NSFW_ID = 1
+        for text in ["A category of birds", "An allegory painting", "Portrait of Gregory"]:
+            self.assertFalse(self.app._is_blocked(text), text)
+        for text in ["Gory scene", "a mutilated statue", "SELF-HARM"]:
+            self.assertTrue(self.app._is_blocked(text), text)
+
     def test_resolution_scheduler_config_and_seed_reach_pipeline(self):
         app = self.app
         app._is_blocked = MagicMock(return_value=False)
