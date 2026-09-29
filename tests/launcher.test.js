@@ -84,3 +84,16 @@ test('install creates the Python 3.11 venv and torch before other requirements',
   const requirements = steps.findIndex(step => [].concat(step.params.message || []).some(m => m.includes('requirements.txt')))
   assert.ok(venv >= 0 && venv < torch && torch < requirements)
 })
+
+for (const script of ['install', 'update']) {
+  test(`${script} verifies dependencies in a step that failed installs cannot skip`, () => {
+    const steps = require(`../${script}`).run
+    const check = steps.findIndex(step => [].concat(step.params.message || []).some(m => m.startsWith('uv pip check')))
+    const marker = steps.findIndex(step => step.method === 'fs.write' && step.params.path === 'app/env/.installed')
+    const lastInstall = steps.findLastIndex(step => [].concat(step.params.message || []).some(m => m.startsWith('uv pip install')))
+    const messages = [].concat(steps[check].params.message)
+    assert.ok(lastInstall < check && check < marker)
+    // Failures must print "Error:" (Pinokio's default break pattern); the echoed command must not.
+    assert.ok(messages[0].includes('RuntimeError(') && !messages.join(' ').includes('Error:'))
+  })
+}

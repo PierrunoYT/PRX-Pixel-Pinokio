@@ -7,7 +7,7 @@ module.exports = {
       params: {
         venv: "{{args.venv}}",
         path: "{{args.path}}",
-        message: "python -c \"raise SystemExit('PRX Pixel requires Apple Silicon on macOS; current PyTorch wheels do not support Intel Macs.')\""
+        message: "python -c \"raise RuntimeError('PRX Pixel requires Apple Silicon on macOS; current PyTorch wheels do not support Intel Macs.')\""
       },
       next: null
     },

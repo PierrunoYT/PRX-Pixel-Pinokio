@@ -41,8 +41,19 @@ module.exports = {
         venv: "env",
         path: "app",
         message: [
-          "uv pip install git+https://github.com/huggingface/diffusers.git@main",
-          "uv pip check",
+          "uv pip install git+https://github.com/huggingface/diffusers.git@main"
+        ]
+      }
+    },
+    // Separate step so it runs even if an install above failed. Pinokio stops only on
+    // output matching /Error:/, which uv does not print; RuntimeError tracebacks do.
+    {
+      method: "shell.run",
+      params: {
+        venv: "env",
+        path: "app",
+        message: [
+          "uv pip check || python -c \"raise RuntimeError('dependency check failed')\"",
           "python -c \"from diffusers import PRXPixelPipeline; from transformers import Qwen3VLTextModel; import gradio\""
         ]
       }
