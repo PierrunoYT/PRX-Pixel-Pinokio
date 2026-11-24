@@ -22,7 +22,7 @@ Local launcher for [Photoroom/prxpixel-t2i](https://huggingface.co/Photoroom/prx
 - NVIDIA GPU with a driver compatible with CUDA 12.8, or a supported AMD GPU on Linux with ROCm 6.3
 - Apple Silicon uses MPS. Intel Macs are not supported by the required PyTorch version.
 - Other systems, including AMD GPUs on Windows, use the CPU fallback; this is much slower.
-- The launcher creates a Python 3.11 environment (the app requires Python 3.10+).
+- The launcher creates a Python 3.11 environment (Diffusers `main` requires Python 3.11+).
 - Substantial GPU/system memory: the ~7B transformer weights alone occupy roughly 14GB at bfloat16. The text encoder, activations, and other allocations require additional memory. This is not a 14GB total-VRAM guarantee.
 - CUDA devices with bfloat16 support use bfloat16; other devices use float32, which needs more memory.
 
